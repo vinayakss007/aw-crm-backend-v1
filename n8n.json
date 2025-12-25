@@ -1,0 +1,266 @@
+{
+    "name": "Universal Social Media Generator",
+    "nodes": [
+      {
+        "parameters": {},
+        "id": "start",
+        "name": "Start",
+        "type": "n8n-nodes-base.start",
+        "typeVersion": 1,
+        "position": [240, 200]
+      },
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "hours",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "id": "trigger",
+        "name": "Hourly Check",
+        "type": "n8n-nodes-base.cron",
+        "typeVersion": 1,
+        "position": [440, 200]
+      },
+      {
+        "parameters": {
+          "operation": "read",
+          "sheetName": "Posts",
+          "options": {
+            "skipHeaderRow": true,
+            "range": "A2:L"
+          }
+        },
+        "id": "read-excel",
+        "name": "Read Excel/Sheets",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4,
+        "position": [640, 200],
+        "credentials": {
+          "googleApi": "google-sheets-auth"
+        }
+      },
+      {
+        "parameters": {
+          "functionCode": "// Get posts ready NOW\nconst now = new Date();\nconst currentHour = now.getHours();\nconst today = now.toISOString().split('T')[0];\n\nreturn items.filter(item => {\n  if (item.json.status !== 'pending') return false;\n  if (!item.json.schedule_date || !item.json.schedule_time) return false;\n  \n  const [hour, minute] = item.json.schedule_time.split(':').map(Number);\n  return item.json.schedule_date === today && hour === currentHour;\n});"
+        },
+        "id": "filter-ready",
+        "name": "Filter Ready Posts",
+        "type": "n8n-nodes-base.function",
+        "typeVersion": 1,
+        "position": [840, 200]
+      },
+      {
+        "parameters": {
+          "functionCode": "// Determine creative approach based on creative_level\nreturn items.map(item => {\n  const creative = (item.json.creative_level || 'medium').toLowerCase();\n  const platform = (item.json.platform || 'facebook').toLowerCase();\n  \n  // Set generation method\n  let method = 'html';\n  if (creative === 'high' || creative === 'ai') method = 'ai';\n  if (creative === 'medium') method = 'html';\n  if (creative === 'low') method = 'simple';\n  \n  // Set brand theme\n  const theme = {\n    color: item.json.brand_color || '#4A90E2',\n    font: item.json.font || 'Arial',\n    logo: item.json.logo_url || '',\n    tagline: item.json.tagline || 'Premium Service'\n  };\n  \n  return {\n    json: {\n      ...item.json,\n      generation_method: method,\n      platform_size: getPlatformSize(platform),\n      theme: theme,\n      final_prompt: `Create ${creative} creative image for ${item.json.company} promoting ${item.json.product}. Brand colors: ${theme.color}. Professional, engaging, social media style.`\n    }\n  };\n});\n\nfunction getPlatformSize(platform) {\n  const sizes = {\n    'facebook_page': { w: 1200, h: 630 },\n    'facebook_group': { w: 1200, h: 630 },\n    'instagram': { w: 1080, h: 1080 },\n    'twitter': { w: 1600, h: 900 },\n    'linkedin': { w: 1200, h: 627 }\n  };\n  return sizes[platform] || sizes['facebook_page'];\n}"
+        },
+        "id": "detect-approach",
+        "name": "Detect Creative Approach",
+        "type": "n8n-nodes-base.function",
+        "typeVersion": 1,
+        "position": [1040, 200]
+      },
+      {
+        "parameters": {
+          "functionCode": "// Split into two paths: AI vs HTML\nconst aiItems = items.filter(i => i.json.generation_method === 'ai');\nconst htmlItems = items.filter(i => i.json.generation_method !== 'ai');\n\n// Return as separate items for routing\nreturn [\n  ...aiItems.map(i => ({ json: { ...i.json, path: 'ai' } })),\n  ...htmlItems.map(i => ({ json: { ...i.json, path: 'html' } }))\n];"
+        },
+        "id": "split-paths",
+        "name": "Split AI vs HTML Paths",
+        "type": "n8n-nodes-base.function",
+        "typeVersion": 1,
+        "position": [1240, 200]
+      },
+      {
+        "parameters": {
+          "functionCode": "// AI Generator Prompt for Leonardo/DALL-E\nreturn items.map(item => ({\n  json: {\n    ...item.json,\n    ai_prompt: `${item.json.final_prompt} Style: ${item.json.theme.tagline}. No text overlay, just background art.`\n  }\n}));"
+        },
+        "id": "ai-prompt",
+        "name": "Create AI Prompt",
+        "type": "n8n-nodes-base.function",
+        "typeVersion": 1,
+        "position": [1440, 100]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.leonardo.ai/v1/generations",
+          "authentication": "genericAuthType",
+          "genericAuthType": "httpHeaderAuth",
+          "headers": {
+            "Authorization": "Bearer YOUR_LEONARDO_KEY",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "prompt": "{{ $json.ai_prompt }}",
+            "modelId": "stable-diffusion-xl-1024-v1-0",
+            "width": "{{ $json.platform_size.w }}",
+            "height": "{{ $json.platform_size.h }}",
+            "steps": 30,
+            "negativePrompt": "text, letters, watermark"
+          },
+          "options": {}
+        },
+        "id": "leonardo-gen",
+        "name": "Generate with Leonardo",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 1,
+        "position": [1640, 100],
+        "credentials": {
+          "httpHeaderAuth": "leonardo-api"
+        }
+      },
+      {
+        "parameters": {
+          "functionCode": "// HTML Template for Medium/Low creativity\nreturn items.map(item => {\n  const { company, product, contact, address, theme, platform_size } = item.json;\n  \n  const html = `\n<!DOCTYPE html>\n<html>\n<head>\n<style>\n  body {\n    margin: 0;\n    width: ${platform_size.w}px;\n    height: ${platform_size.h}px;\n    font-family: '${theme.font}', sans-serif;\n    background: linear-gradient(135deg, ${theme.color} 0%, #ffffff 100%);\n    display: flex;\n    flex-direction: column;\n    justify-content: center;\n    align-items: center;\n    text-align: center;\n    padding: 40px;\n    box-sizing: border-box;\n  }\n  .logo { font-size: 40px; margin-bottom: 20px; }\n  .company { font-size: 56px; font-weight: bold; color: #000; }\n  .product { font-size: 40px; color: #333; margin-top: 10px; }\n  .contact { font-size: 28px; color: #555; margin-top: 10px; }\n  .tagline { font-size: 24px; color: ${theme.color}; font-style: italic; margin-top: 15px; }\n</style>\n</head>\n<body>\n  <div class=\"logo\">${theme.logo || '⭐'}</div>\n  <div class=\"company\">${company}</div>\n  <div class=\"product\">${product}</div>\n  <div class=\"contact\">${contact} | ${address}</div>\n  <div class=\"tagline\">${theme.tagline}</div>\n</body>\n</html>\n  `;\n  \n  return { json: { ...item.json, html } };\n});"
+        },
+        "id": "html-template",
+        "name": "Create HTML Template",
+        "type": "n8n-nodes-base.function",
+        "typeVersion": 1,
+        "position": [1440, 300]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://chrome.browserless.io/screenshot?token=YOUR_API_KEY",
+          "authentication": "genericAuthType",
+          "genericAuthType": "httpHeaderAuth",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "html": "{{ $json.html }}",
+            "options": {
+              "fullPage": true,
+              "type": "png",
+              "viewport": {
+                "width": "{{ $json.platform_size.w }}",
+                "height": "{{ $json.platform_size.h }}"
+              }
+            }
+          },
+          "options": {}
+        },
+        "id": "html-render",
+        "name": "Render HTML Image",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 1,
+        "position": [1640, 300],
+        "credentials": {
+          "httpHeaderAuth": "browserless-api"
+        }
+      },
+      {
+        "parameters": {
+          "functionCode": "// Merge AI and HTML results\n// AI path: Get image URL from Leonardo\n// HTML path: Get binary from browserless\n\nreturn items.map(item => {\n  const isAI = item.json.path === 'ai';\n  const filename = `${item.json.company.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.png`;\n  \n  return {\n    json: {\n      ...item.json,\n      filename: filename,\n      final_image_source: isAI ? 'leonardo' : 'html',\n      binary_data: isAI ? item.json.data?.url : item.binary?.data\n    }\n  };\n});"
+        },
+        "id": "merge-results",
+        "name": "Merge Results",
+        "type": "n8n-nodes-base.function",
+        "typeVersion": 1,
+        "position": [1840, 200]
+      },
+      {
+        "parameters": {
+          "operation": "upload",
+          "parentId": "YOUR_DRIVE_FOLDER",
+          "options": {
+            "mimeType": "image/png"
+          }
+        },
+        "id": "save-drive",
+        "name": "Save to Google Drive",
+        "type": "n8n-nodes-base.googleDrive",
+        "typeVersion": 1,
+        "position": [2040, 100],
+        "credentials": {
+          "googleApi": "google-api-auth"
+        }
+      },
+      {
+        "parameters": {
+          "operation": "update",
+          "sheetName": "Posts",
+          "options": {
+            "valueInputOption": "USER_ENTERED"
+          }
+        },
+        "id": "update-status",
+        "name": "Update Status & URLs",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4,
+        "position": [2040, 300],
+        "credentials": {
+          "googleApi": "google-sheets-auth"
+        }
+      },
+      {
+        "parameters": {
+          "operation": "append",
+          "sheetName": "Posting Queue",
+          "options": {
+            "valueInputOption": "USER_ENTERED"
+          }
+        },
+        "id": "add-to-queue",
+        "name": "Add to Platform Queue",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4,
+        "position": [2240, 200],
+        "credentials": {
+          "googleApi": "google-sheets-auth"
+        }
+      }
+    ],
+    "connections": {
+      "Start": {
+        "main": [[{ "node": "Hourly Check", "type": "main", "index": 0 }]]
+      },
+      "Hourly Check": {
+        "main": [[{ "node": "Read Excel/Sheets", "type": "main", "index": 0 }]]
+      },
+      "Read Excel/Sheets": {
+        "main": [[{ "node": "Filter Ready Posts", "type": "main", "index": 0 }]]
+      },
+      "Filter Ready Posts": {
+        "main": [[{ "node": "Detect Creative Approach", "type": "main", "index": 0 }]]
+      },
+      "Detect Creative Approach": {
+        "main": [[{ "node": "Split AI vs HTML Paths", "type": "main", "index": 0 }]]
+      },
+      "Split AI vs HTML Paths": {
+        "main": [
+          [{ "node": "Create AI Prompt", "type": "main", "index": 0 }],
+          [{ "node": "Create HTML Template", "type": "main", "index": 0 }]
+        ]
+      },
+      "Create AI Prompt": {
+        "main": [[{ "node": "Generate with Leonardo", "type": "main", "index": 0 }]]
+      },
+      "Create HTML Template": {
+        "main": [[{ "node": "Render HTML Image", "type": "main", "index": 0 }]]
+      },
+      "Generate with Leonardo": {
+        "main": [[{ "node": "Merge Results", "type": "main", "index": 0 }]]
+      },
+      "Render HTML Image": {
+        "main": [[{ "node": "Merge Results", "type": "main", "index": 0 }]]
+      },
+      "Merge Results": {
+        "main": [
+          [{ "node": "Save to Google Drive", "type": "main", "index": 0 }],
+          [{ "node": "Update Status & URLs", "type": "main", "index": 0 }],
+          [{ "node": "Add to Platform Queue", "type": "main", "index": 0 }]
+        ]
+      }
+    },
+    "active": false,
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "versionId": "1"
+  }
