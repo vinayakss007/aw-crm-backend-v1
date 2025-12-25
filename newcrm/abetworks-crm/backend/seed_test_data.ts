@@ -202,6 +202,17 @@ async function seedTestData() {
     const checkOpportunityQuery = `SELECT id FROM opportunities WHERE name = $1`;
     const checkOpportunityResult = await pool.query(checkOpportunityQuery, ['Test Opportunity']);
 
+    // Get the contact record to use for opportunity
+    let contactRecord;
+    if (checkContactResult.rows.length > 0) {
+      contactRecord = checkContactResult.rows[0];
+    } else {
+      // If contact was just created, get the result
+      const contactQueryForOpportunity = `SELECT id FROM contacts WHERE email = $1`;
+      const contactResultForOpportunity = await pool.query(contactQueryForOpportunity, ['john.doe@testcorp.com']);
+      contactRecord = contactResultForOpportunity.rows[0];
+    }
+
     if (checkOpportunityResult.rows.length > 0) {
       console.log(`Test opportunity already exists with ID: ${checkOpportunityResult.rows[0].id}`);
     } else {
@@ -209,8 +220,8 @@ async function seedTestData() {
         uuidv4(),
         'Test Opportunity',
         'A test opportunity for CRM testing',
-        checkAccountResult.rows[0].id,
-        checkContactResult.rows[0].id,
+        accountRecord.id,
+        contactRecord.id,
         'Proposal',
         50,
         100000,
@@ -240,6 +251,17 @@ async function seedTestData() {
     const checkActivityQuery = `SELECT id FROM activities WHERE subject = $1`;
     const checkActivityResult = await pool.query(checkActivityQuery, ['Test Activity']);
 
+    // Get the opportunity record to use for activity
+    let opportunityRecord;
+    if (checkOpportunityResult.rows.length > 0) {
+      opportunityRecord = checkOpportunityResult.rows[0];
+    } else {
+      // If opportunity was just created, get the result
+      const opportunityQueryForActivity = `SELECT id FROM opportunities WHERE name = $1`;
+      const opportunityResultForActivity = await pool.query(opportunityQueryForActivity, ['Test Opportunity']);
+      opportunityRecord = opportunityResultForActivity.rows[0];
+    }
+
     if (checkActivityResult.rows.length > 0) {
       console.log(`Test activity already exists with ID: ${checkActivityResult.rows[0].id}`);
     } else {
@@ -255,11 +277,11 @@ async function seedTestData() {
         120,
         actualAdminId,
         actualAdminId,
-        checkAccountResult.rows[0].id,
-        checkContactResult.rows[0].id,
-        checkOpportunityResult.rows[0].id,
+        accountRecord.id,
+        contactRecord.id,
+        opportunityRecord.id,
         'opportunity',
-        checkOpportunityResult.rows[0].id,
+        opportunityRecord.id,
         false,
         'Conference Room A',
         new Date(Date.now() + 30 * 60 * 1000), // 30 minutes from now
@@ -290,8 +312,8 @@ async function seedTestData() {
         'select',
         'Referral Source',
         false,
-        'Web',
-        JSON.stringify(['Web', 'Referral', 'Trade Show', 'Cold Call']),
+        JSON.stringify('Web'), // default_value should be JSON
+        JSON.stringify(['Web', 'Referral', 'Trade Show', 'Cold Call']), // options should be JSON array
         new Date(),
         new Date()
       ]);
