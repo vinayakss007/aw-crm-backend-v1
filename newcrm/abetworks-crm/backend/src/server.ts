@@ -20,6 +20,9 @@ import fileRoutes from './routes/fileRoutes';
 import customFieldRoutes from './routes/customFieldRoutes';
 import dataImportExportRoutes from './routes/dataImportExportRoutes';
 
+// Import health check controller
+import { healthCheck, readyCheck } from './controllers/healthController';
+
 // Import middleware
 import { errorHandler, notFound } from './middleware/errorHandler';
 import authMiddleware from './middleware/authMiddleware';
@@ -72,6 +75,10 @@ app.use('/api/activities', authMiddleware, activityRoutes);
 app.use('/api/files', authMiddleware, fileRoutes);
 app.use('/api/custom-fields', authMiddleware, customFieldRoutes);
 app.use('/api/data', authMiddleware, dataImportExportRoutes);
+
+// Health check endpoints (should be accessible without auth)
+app.get('/health', healthCheck);
+app.get('/ready', readyCheck);
 
 // Error handling middleware
 app.use(notFound);

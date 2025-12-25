@@ -98,6 +98,18 @@ class LeadModel {
     return createdLead;
   }
 
+  // Find lead by email
+  static async findByEmail(email: string): Promise<Lead[]> {
+    const query = `SELECT *, "custom_fields" AS "customFields" FROM ${this.tableName} WHERE email = $1 AND "deletedAt" IS NULL`;
+    const result = await pool.query(query, [email]);
+
+    // Process custom fields for each lead
+    return result.rows.map(lead => {
+      lead.customFields = lead.customFields || {};
+      return lead;
+    });
+  }
+
   // Find lead by ID
   static async findById(id: string): Promise<Lead | null> {
     const query = `SELECT *, "custom_fields" AS "customFields" FROM ${this.tableName} WHERE id = $1 AND "deletedAt" IS NULL`;

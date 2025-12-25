@@ -1,27 +1,28 @@
 import { Response } from 'express';
 import { AuthRequest } from '../types/express';
+import LeadService from '../services/LeadService';
 import LeadModel from '../models/LeadModel';
 import ContactModel from '../models/ContactModel';
 import AccountModel from '../models/AccountModel';
+import { ValidationError, AuthenticationError, AuthorizationError, NotFoundError } from '../utils/errors';
+import logger from '../utils/logger';
 
 // Create a new lead
 export const createLead = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
-      res.status(401).json({ message: 'User not authenticated' });
-      return;
+      throw new AuthenticationError();
     }
 
     const { firstName, lastName, company, email, phone, jobTitle, leadSource, status, description, address, city, state, zipCode, country, customFields } = req.body;
 
     // Validate required fields
     if (!firstName || !lastName || !company || !email || !phone) {
-      res.status(400).json({ message: 'First name, last name, company, email, and phone are required' });
-      return;
+      throw new ValidationError('First name, last name, company, email, and phone are required');
     }
 
     // Create lead with the authenticated user as owner
-    const lead = await LeadModel.create({
+    const lead = await LeadService.create({
       firstName,
       lastName,
       company,
@@ -46,8 +47,16 @@ export const createLead = async (req: AuthRequest, res: Response): Promise<void>
       lead
     });
   } catch (error) {
-    console.error('Create lead error:', error);
-    res.status(500).json({ message: 'Server error while creating lead' });
+    logger.error('Create lead error:', { error, userId: req.user?.id, body: req.body });
+
+    // Handle specific error types
+    if (error instanceof ValidationError) {
+      res.status(400).json({ message: error.message });
+    } else if (error instanceof AuthenticationError) {
+      res.status(401).json({ message: error.message });
+    } else {
+      res.status(500).json({ message: 'Server error while creating lead' });
+    }
   }
 };
 
@@ -57,26 +66,33 @@ export const getLeadById = async (req: AuthRequest, res: Response): Promise<void
     const { id } = req.params;
 
     if (!id) {
-      res.status(400).json({ message: 'Lead ID is required' });
-      return;
+      throw new ValidationError('Lead ID is required');
     }
 
     const lead = await LeadModel.findById(id);
 
     if (!lead) {
-      res.status(404).json({ message: 'Lead not found' });
-      return;
+      throw new NotFoundError('Lead not found');
     }
 
     // Check if user has access to this lead
     if (req.user && (req.user.id === lead.ownerId || req.user.id === lead.assignedTo || req.user.role === 'admin')) {
       res.json({ lead });
     } else {
-      res.status(403).json({ message: 'Not authorized to access this lead' });
+      throw new AuthorizationError('Not authorized to access this lead');
     }
   } catch (error) {
-    console.error('Get lead by ID error:', error);
-    res.status(500).json({ message: 'Server error while fetching lead' });
+    logger.error('Get lead by ID error:', { error, userId: req.user?.id, leadId: req.params.id });
+
+    if (error instanceof ValidationError) {
+      res.status(400).json({ message: error.message });
+    } else if (error instanceof NotFoundError) {
+      res.status(404).json({ message: error.message });
+    } else if (error instanceof AuthorizationError) {
+      res.status(403).json({ message: error.message });
+    } else {
+      res.status(500).json({ message: 'Server error while fetching lead' });
+    }
   }
 };
 
@@ -84,8 +100,7 @@ export const getLeadById = async (req: AuthRequest, res: Response): Promise<void
 export const getLeads = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
-      res.status(401).json({ message: 'User not authenticated' });
-      return;
+      throw new AuthenticationError();
     }
 
     const page = parseInt(req.query.page as string) || 1;
@@ -94,48 +109,57 @@ export const getLeads = async (req: AuthRequest, res: Response): Promise<void> =
     const status = req.query.status as string || '';
 
     if (page < 1 || limit < 1 || limit > 100) {
-      res.status(400).json({ message: 'Invalid page or limit parameters' });
-      return;
+      throw new ValidationError('Invalid page or limit parameters');
     }
 
     let result;
 
     if (searchTerm) {
       // Search leads
-      result = await LeadModel.search(searchTerm, page, limit);
+      result = await LeadService.search(searchTerm, page, limit);
     } else if (status) {
       // Get leads by status
-      result = await LeadModel.findByStatus(status, page, limit);
+      result = await LeadService.findByStatus(status, page, limit);
     } else if (req.user.role === 'admin') {
       // Admin can see all leads
-      result = await LeadModel.getAll(page, limit);
+      result = await LeadService.getAll(page, limit);
     } else {
       // Regular user can see their own leads or assigned leads
-      const ownerResult = await LeadModel.findByOwnerId(req.user.id, page, Math.ceil(limit / 2));
-      const assignedResult = await LeadModel.findByAssignedTo(req.user.id, page, Math.floor(limit / 2));
-      
+      const ownerResult = await LeadService.findByOwnerId(req.user.id, page, Math.ceil(limit / 2));
+      const assignedResult = await LeadService.findByAssignedTo(req.user.id, page, Math.floor(limit / 2));
+
       // Combine results, ensuring no duplicates
-      const allLeads = [...ownerResult.leads, ...assignedResult.leads];
-      const uniqueLeads = allLeads.filter((lead, index, self) => 
+      const allLeads = [...ownerResult.items, ...assignedResult.items];
+      const uniqueLeads = allLeads.filter((lead, index, self) =>
         index === self.findIndex(l => l.id === lead.id)
       );
-      
+
       result = {
-        leads: uniqueLeads.slice(0, limit),
-        total: ownerResult.total + assignedResult.total
+        items: uniqueLeads.slice(0, limit),
+        total: ownerResult.total + assignedResult.total,
+        page,
+        limit,
+        totalPages: Math.ceil((ownerResult.total + assignedResult.total) / limit)
       };
     }
 
     res.json({
-      leads: result.leads,
+      leads: result.items,
       total: result.total,
       page,
       limit,
-      totalPages: Math.ceil(result.total / limit)
+      totalPages: result.totalPages
     });
   } catch (error) {
-    console.error('Get leads error:', error);
-    res.status(500).json({ message: 'Server error while fetching leads' });
+    logger.error('Get leads error:', { error, userId: req.user?.id, query: req.query });
+
+    if (error instanceof ValidationError) {
+      res.status(400).json({ message: error.message });
+    } else if (error instanceof AuthenticationError) {
+      res.status(401).json({ message: error.message });
+    } else {
+      res.status(500).json({ message: 'Server error while fetching leads' });
+    }
   }
 };
 
@@ -179,7 +203,7 @@ export const updateLead = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
-    const updatedLead = await LeadModel.update(id, updateData);
+    const updatedLead = await LeadService.update(id, updateData);
 
     if (!updatedLead) {
       res.status(404).json({ message: 'Lead not found' });
@@ -266,50 +290,13 @@ export const convertLead = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    // Create a new contact from the lead
-    const contact = await ContactModel.create({
-      firstName: lead.firstName,
-      lastName: lead.lastName,
-      email: lead.email,
-      phone: lead.phone,
-      jobTitle: lead.jobTitle,
-      ownerId: lead.ownerId,
-      assignedTo: lead.assignedTo,
-      status: 'active',
-      description: lead.description,
-      address: lead.address,
-      city: lead.city,
-      state: lead.state,
-      zipCode: lead.zipCode,
-      country: lead.country
-    });
-
-    // Create a new account from the lead
-    const account = await AccountModel.create({
-      name: lead.company,
-      description: lead.description,
-      ownerId: lead.ownerId,
-      assignedTo: lead.assignedTo,
-      status: 'active',
-      address: lead.address,
-      city: lead.city,
-      state: lead.state,
-      zipCode: lead.zipCode,
-      country: lead.country
-    });
-
-    // Update the lead to mark it as converted
-    const converted = await LeadModel.convertToContactAndAccount(id, contact.id, account.id);
-
-    if (!converted) {
-      res.status(404).json({ message: 'Lead not found for conversion' });
-      return;
-    }
+    // Use the service to convert the lead
+    const result = await LeadService.convertLead(id);
 
     res.json({
       message: 'Lead converted successfully',
-      contact,
-      account
+      contact: result.contact,
+      account: result.account
     });
   } catch (error) {
     console.error('Convert lead error:', error);
