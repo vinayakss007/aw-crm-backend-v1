@@ -12,7 +12,7 @@ export const createLead = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
-    const { firstName, lastName, company, email, phone, jobTitle, leadSource, status, description, address, city, state, zipCode, country } = req.body;
+    const { firstName, lastName, company, email, phone, jobTitle, leadSource, status, description, address, city, state, zipCode, country, customFields } = req.body;
 
     // Validate required fields
     if (!firstName || !lastName || !company || !email || !phone) {
@@ -37,7 +37,8 @@ export const createLead = async (req: AuthRequest, res: Response): Promise<void>
       city,
       state,
       zipCode,
-      country
+      country,
+      customFields: customFields || {}
     });
 
     res.status(201).json({
@@ -142,7 +143,12 @@ export const getLeads = async (req: AuthRequest, res: Response): Promise<void> =
 export const updateLead = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const { customFields, ...updateData } = req.body;
+
+    // Add customFields to updateData if present
+    if (customFields) {
+      (updateData as any).customFields = customFields;
+    }
 
     if (!id) {
       res.status(400).json({ message: 'Lead ID is required' });

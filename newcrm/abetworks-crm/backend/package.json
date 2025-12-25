@@ -9,6 +9,8 @@
     "build": "tsc",
     "migrate": "ts-node src/database/migrate.ts",
     "migrate:custom-fields": "ts-node src/database/migrate-custom-fields.ts",
+    "migrate:custom-fields-management": "ts-node src/database/migrate-custom-fields-management.ts",
+    "migrate:audit-logs": "ts-node src/database/migrate-audit-logs.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

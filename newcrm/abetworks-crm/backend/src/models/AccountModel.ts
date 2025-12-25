@@ -1,5 +1,7 @@
 import pool from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
+import CustomFieldService from '../services/CustomFieldService';
+import AuditLogService from '../services/AuditLogService';
 
 export interface Account {
   id: string;
@@ -65,7 +67,19 @@ class AccountModel {
       now
     ]);
 
-    return result.rows[0];
+    const createdAccount = result.rows[0];
+
+    // Log the creation in audit logs
+    await AuditLogService.create(
+      accountData.ownerId,  // Use the owner ID as the user performing the action
+      'CREATE',
+      'account',
+      createdAccount.id,
+      undefined, // No old value for creation
+      createdAccount
+    );
+
+    return createdAccount;
   }
 
   // Find account by ID
