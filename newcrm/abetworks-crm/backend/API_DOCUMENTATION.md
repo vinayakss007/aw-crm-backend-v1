@@ -15,9 +15,52 @@ For local development:
 http://localhost:5000/api/v1
 ```
 
+## Health Check Endpoints
+
+The system provides health check endpoints for monitoring:
+
+#### Health Check
+```
+GET /health
+```
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2023-01-01T00:00:00.000Z",
+  "uptime": 3600,
+  "responseTime": {
+    "database": "5ms"
+  },
+  "checks": {
+    "database": {
+      "status": "connected",
+      "responseTime": "5ms"
+    },
+    "users": {
+      "count": 10
+    }
+  }
+}
+```
+
+#### Readiness Check
+```
+GET /ready
+```
+
+**Response:**
+```json
+{
+  "status": "ready",
+  "timestamp": "2023-01-01T00:00:00.000Z"
+}
+```
+
 ## Authentication
 
-The API uses JWT (JSON Web Token) for authentication. All endpoints except `/auth` require a valid JWT token in the Authorization header.
+The API uses JWT (JSON Web Token) for authentication. All endpoints except `/auth` and health endpoints require a valid JWT token in the Authorization header.
 
 ### Authentication Endpoints
 
@@ -333,6 +376,12 @@ POST /api/v1/leads
 GET /api/v1/leads
 ```
 
+**Query Parameters:**
+- `page` (optional, default: 1)
+- `limit` (optional, default: 10, max: 100)
+- `search` (optional, for full-text search)
+- `status` (optional, to filter by status)
+
 #### Get Lead by ID
 ```
 GET /api/v1/leads/:id
@@ -613,6 +662,17 @@ GET /api/v1/audit-logs/entity/:entity/:entityId
 GET /api/v1/audit-logs/action/:action
 ```
 
+## Error Handling and Custom Error Types
+
+The system implements specific error types for better debugging:
+
+- `ValidationError`: Invalid input data format
+- `AuthenticationError`: Authentication required or failed
+- `AuthorizationError`: Insufficient permissions
+- `NotFoundError`: Resource not found
+- `ConflictError`: Resource already exists
+- `InternalServerError`: General server error
+
 ## Integration Guidelines
 
 ### For Admin Users
@@ -623,12 +683,14 @@ Admin users have full system access and can perform all operations including:
 - Importing and exporting data
 - Accessing all audit logs
 - Managing system settings
+- Monitoring system health
 
 **Example Admin Workflow:**
 1. Create custom fields for leads
 2. Import lead data in bulk
 3. Assign leads to sales team members
 4. Monitor system activity through audit logs
+5. Check system health via health endpoints
 
 ### For Regular Users
 
@@ -637,6 +699,7 @@ Regular users can:
 - Access assigned accounts, contacts, leads, opportunities, and activities
 - Create and update their own records
 - Upload and manage files related to their entities
+- Track their sales activities
 
 **Example User Workflow:**
 1. Log in and access their dashboard
@@ -661,7 +724,8 @@ API keys can be created by admin users and have specific permissions based on th
 2. Implement proper error handling and retry logic
 3. Use bulk operations when processing large datasets
 4. Implement rate limiting to avoid overwhelming the system
-5. Use webhooks for real-time notifications (if available)
+5. Monitor health endpoints for system status
+6. Use structured logging for troubleshooting
 
 ### Error Handling
 
@@ -673,6 +737,7 @@ The API returns appropriate HTTP status codes:
 - `401`: Unauthorized (invalid or missing token)
 - `403`: Forbidden (insufficient permissions)
 - `404`: Not Found
+- `409`: Conflict (resource already exists)
 - `429`: Too Many Requests (rate limit exceeded)
 - `500`: Internal Server Error
 
@@ -680,7 +745,7 @@ The API returns appropriate HTTP status codes:
 ```json
 {
   "message": "Error description",
-  "errors": ["Error details if applicable"]
+  "stack": "Stack trace in development mode" // Only in development
 }
 ```
 
@@ -690,15 +755,25 @@ The API implements rate limiting:
 - 100 requests per 15 minutes per IP address
 - Excessive requests will return a 429 status code
 
+## Database Connection Pooling
+
+The system uses optimized database connection pooling:
+- Maximum connections: 20
+- Minimum connections: 5
+- Idle timeout: 30 seconds
+- Connection timeout: 2 seconds
+- Max uses per connection: 7500
+
 ## Security Best Practices
 
 1. Always use HTTPS in production
 2. Store JWT tokens securely and implement proper expiration
 3. Use refresh tokens for extended sessions
-4. Implement proper input validation
-5. Sanitize all user inputs
-6. Use API keys for server-to-server integrations
-7. Monitor and log all API access for security auditing
+4. Implement proper input validation and sanitization
+5. Use API keys for server-to-server integrations
+6. Monitor and log all API access for security auditing
+7. Regularly check health endpoints for system status
+8. Use structured logging for security event tracking
 
 ## SDK and Client Libraries
 
@@ -709,7 +784,7 @@ While not included in this documentation, consider creating client libraries for
 - Java SDK
 - .NET SDK
 
-These libraries should handle authentication, error handling, and common operations.
+These libraries should handle authentication, error handling, health checks, and common operations.
 
 ## Support and Contact
 
@@ -717,3 +792,4 @@ For API support or questions:
 - Email: api-support@abetworks-crm.com
 - Documentation: https://docs.abetworks-crm.com
 - Issue Tracker: https://github.com/abetworks-crm/issues
+- Health Status: Monitor /health endpoint for system status
