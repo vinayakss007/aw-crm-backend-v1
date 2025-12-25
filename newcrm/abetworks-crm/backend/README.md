@@ -7,9 +7,10 @@ ABETWORKS CRM is an enterprise-grade Customer Relationship Management system bui
 
 ### Authentication & Authorization
 - JWT-based authentication
-- Role-based access control
+- Role-based access control (RBAC)
 - User registration and login
 - Password hashing with bcrypt
+- Refresh token support
 
 ### CRM Modules
 - **Accounts**: Manage business accounts and organizations
@@ -18,11 +19,28 @@ ABETWORKS CRM is an enterprise-grade Customer Relationship Management system bui
 - **Opportunities**: Manage sales opportunities with pipeline tracking
 - **Activities**: Track all customer interactions (calls, emails, meetings)
 
+### Dynamic Custom Fields
+- **Unlimited Custom Fields**: Add unlimited custom fields to any entity (leads, contacts, accounts, etc.)
+- **Multiple Field Types**: Support for text, number, date, boolean, select, and multiselect fields
+- **Field Validation**: Built-in validation for custom fields
+- **Management Interface**: Admin interface for creating and managing custom fields
+
 ### File Management
 - **MinIO Integration**: Scalable object storage for file attachments
 - **File Upload**: Secure file upload with type validation
 - **File Storage**: Organized file storage by entity type
 - **File Access**: Secure file access with presigned URLs
+
+### Data Management
+- **Import/Export**: Bulk import and export functionality
+- **Bulk Operations**: Bulk update and delete operations
+- **Data Validation**: Comprehensive data validation and sanitization
+
+### Monitoring & Health
+- **Health Check Endpoints**: `/health` and `/ready` endpoints for system monitoring
+- **Structured Logging**: Comprehensive logging with Winston
+- **Audit Logging**: Complete audit trail for all user actions
+- **Performance Metrics**: Response time and resource utilization tracking
 
 ### API Endpoints
 
@@ -82,16 +100,35 @@ ABETWORKS CRM is an enterprise-grade Customer Relationship Management system bui
 - `GET /api/files/url/:fileName` - Get presigned URL for file
 - `DELETE /api/files/:fileName` - Delete file
 
+#### Custom Fields
+- `POST /api/custom-fields` - Create custom field (admin only)
+- `GET /api/custom-fields/:entity` - Get custom fields for entity
+- `GET /api/custom-fields/field/:id` - Get custom field by ID
+- `PUT /api/custom-fields/:id` - Update custom field (admin only)
+- `DELETE /api/custom-fields/:id` - Delete custom field (admin only)
+
+#### Data Management
+- `POST /api/data/import` - Import data (admin only)
+- `GET /api/data/export/:entity` - Export data (admin only)
+- `DELETE /api/data/bulk-delete` - Bulk delete records (admin only)
+- `PUT /api/data/bulk-update` - Bulk update records (admin only)
+
+#### Monitoring
+- `GET /health` - Health check endpoint
+- `GET /ready` - Readiness check endpoint
+- `GET /api/audit-logs` - Get audit logs (admin only)
+
 ## Tech Stack
 - **Runtime**: Node.js
 - **Language**: TypeScript
 - **Framework**: Express.js
-- **Database**: PostgreSQL
+- **Database**: PostgreSQL with connection pooling
 - **Authentication**: JSON Web Tokens (JWT)
 - **Password Hashing**: bcrypt
-- **Validation**: Express-validator
-- **Logging**: Winston
-- **Testing**: Jest
+- **Validation**: Custom validation utilities
+- **Logging**: Winston with structured logging
+- **Testing**: Jest with comprehensive test coverage
+- **Caching**: In-memory caching system
 
 ## Setup
 
@@ -99,8 +136,10 @@ ABETWORKS CRM is an enterprise-grade Customer Relationship Management system bui
 2. Install dependencies: `npm install`
 3. Set up environment variables in `.env` file
 4. Set up PostgreSQL database
-5. Run database migrations
-6. Start the server: `npm run dev`
+5. Run database migrations: `npm run migrate`
+6. Run custom fields migration: `npm run migrate:custom-fields`
+7. Run audit logs migration: `npm run migrate:audit-logs`
+8. Start the server: `npm run dev`
 
 ## Environment Variables
 Create a `.env` file in the root directory with the following variables:
@@ -118,21 +157,45 @@ JWT_REFRESH_EXPIRE=30d
 # Server Configuration
 PORT=5000
 NODE_ENV=development
+
+# Logging Configuration
+LOG_LEVEL=info
 ```
 
 ## Database Schema
-The database schema is defined in `src/database/migrations/001_initial_schema.sql`. It includes tables for users, accounts, contacts, leads, opportunities, activities, and roles with appropriate relationships and indexes.
+The database schema includes tables for users, accounts, contacts, leads, opportunities, activities, custom_fields, and audit_logs with appropriate relationships and indexes. The system uses PostgreSQL's JSONB for flexible custom field storage.
 
 ## Security Features
 - Passwords are hashed using bcrypt
-- JWT tokens with expiration
+- JWT tokens with expiration and refresh tokens
 - Input validation and sanitization
-- Rate limiting to prevent abuse
+- Rate limiting to prevent abuse (100 requests per 15 minutes)
 - CORS configured for security
 - Helmet for HTTP headers security
+- Structured logging for security auditing
+- Role-based access control with fine-grained permissions
+
+## Performance Optimizations
+- **Connection Pooling**: Optimized PostgreSQL connection pooling (20 max connections)
+- **Caching**: In-memory caching for frequently accessed data
+- **Indexing**: Proper database indexing for performance
+- **Pagination**: Efficient pagination for large datasets
+- **Query Optimization**: Optimized SQL queries with proper parameterization
 
 ## Error Handling
-The application includes comprehensive error handling with appropriate HTTP status codes and error messages.
+The application includes comprehensive error handling with specific error types:
+- ValidationError, AuthenticationError, AuthorizationError, NotFoundError, ConflictError, InternalServerError
+- Structured logging for all errors
+- Appropriate HTTP status codes for all error conditions
 
 ## API Documentation
-API documentation follows REST principles with consistent response formats. All endpoints require authentication unless specified otherwise.
+Complete API documentation available at `API_DOCUMENTATION.md` for detailed endpoint specifications, request/response examples, and integration guidelines.
+
+## Monitoring & Health
+- Health check endpoint at `/health` for system monitoring
+- Readiness endpoint at `/ready` for deployment orchestration
+- Structured logging with Winston for operational insights
+- Audit logging for security and compliance
+
+## Support
+For support and documentation, visit the API documentation or contact the development team.

@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../types/express';
 import pool from '../config/database';
+import config from '../config/config';
 
 // Health check endpoint
 export const healthCheck = async (_req: AuthRequest, res: Response): Promise<void> => {
@@ -14,10 +15,13 @@ export const healthCheck = async (_req: AuthRequest, res: Response): Promise<voi
     const userCountResult = await pool.query('SELECT COUNT(*) FROM users');
     const userCount = parseInt(userCountResult.rows[0].count);
 
+    // Check other health indicators if needed
     const healthCheck = {
       status: 'healthy',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
+      environment: config.node_env,
+      version: '1.0.0',
       responseTime: {
         database: `${dbResponseTime}ms`
       },
@@ -37,6 +41,8 @@ export const healthCheck = async (_req: AuthRequest, res: Response): Promise<voi
     const errorResponse = {
       status: 'unhealthy',
       timestamp: new Date().toISOString(),
+      environment: config.node_env,
+      version: '1.0.0',
       error: error instanceof Error ? error.message : 'Unknown error',
       checks: {
         database: {
@@ -55,12 +61,19 @@ export const readyCheck = async (_req: AuthRequest, res: Response): Promise<void
     // Test database connection
     await pool.query('SELECT 1');
 
-    res.status(200).json({ status: 'ready', timestamp: new Date().toISOString() });
+    res.status(200).json({
+      status: 'ready',
+      timestamp: new Date().toISOString(),
+      environment: config.node_env,
+      version: '1.0.0'
+    });
   } catch (error) {
-    res.status(503).json({ 
-      status: 'not ready', 
+    res.status(503).json({
+      status: 'not ready',
       error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      environment: config.node_env,
+      version: '1.0.0'
     });
   }
 };
