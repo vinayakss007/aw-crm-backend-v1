@@ -1,266 +1,277 @@
 {
-    "name": "Universal Social Media Generator",
-    "nodes": [
-      {
-        "parameters": {},
-        "id": "start",
-        "name": "Start",
-        "type": "n8n-nodes-base.start",
-        "typeVersion": 1,
-        "position": [240, 200]
-      },
-      {
-        "parameters": {
-          "rule": {
-            "interval": [
-              {
-                "field": "hours",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "id": "trigger",
-        "name": "Hourly Check",
-        "type": "n8n-nodes-base.cron",
-        "typeVersion": 1,
-        "position": [440, 200]
-      },
-      {
-        "parameters": {
-          "operation": "read",
-          "sheetName": "Posts",
-          "options": {
-            "skipHeaderRow": true,
-            "range": "A2:L"
-          }
-        },
-        "id": "read-excel",
-        "name": "Read Excel/Sheets",
-        "type": "n8n-nodes-base.googleSheets",
-        "typeVersion": 4,
-        "position": [640, 200],
-        "credentials": {
-          "googleApi": "google-sheets-auth"
-        }
-      },
-      {
-        "parameters": {
-          "functionCode": "// Get posts ready NOW\nconst now = new Date();\nconst currentHour = now.getHours();\nconst today = now.toISOString().split('T')[0];\n\nreturn items.filter(item => {\n  if (item.json.status !== 'pending') return false;\n  if (!item.json.schedule_date || !item.json.schedule_time) return false;\n  \n  const [hour, minute] = item.json.schedule_time.split(':').map(Number);\n  return item.json.schedule_date === today && hour === currentHour;\n});"
-        },
-        "id": "filter-ready",
-        "name": "Filter Ready Posts",
-        "type": "n8n-nodes-base.function",
-        "typeVersion": 1,
-        "position": [840, 200]
-      },
-      {
-        "parameters": {
-          "functionCode": "// Determine creative approach based on creative_level\nreturn items.map(item => {\n  const creative = (item.json.creative_level || 'medium').toLowerCase();\n  const platform = (item.json.platform || 'facebook').toLowerCase();\n  \n  // Set generation method\n  let method = 'html';\n  if (creative === 'high' || creative === 'ai') method = 'ai';\n  if (creative === 'medium') method = 'html';\n  if (creative === 'low') method = 'simple';\n  \n  // Set brand theme\n  const theme = {\n    color: item.json.brand_color || '#4A90E2',\n    font: item.json.font || 'Arial',\n    logo: item.json.logo_url || '',\n    tagline: item.json.tagline || 'Premium Service'\n  };\n  \n  return {\n    json: {\n      ...item.json,\n      generation_method: method,\n      platform_size: getPlatformSize(platform),\n      theme: theme,\n      final_prompt: `Create ${creative} creative image for ${item.json.company} promoting ${item.json.product}. Brand colors: ${theme.color}. Professional, engaging, social media style.`\n    }\n  };\n});\n\nfunction getPlatformSize(platform) {\n  const sizes = {\n    'facebook_page': { w: 1200, h: 630 },\n    'facebook_group': { w: 1200, h: 630 },\n    'instagram': { w: 1080, h: 1080 },\n    'twitter': { w: 1600, h: 900 },\n    'linkedin': { w: 1200, h: 627 }\n  };\n  return sizes[platform] || sizes['facebook_page'];\n}"
-        },
-        "id": "detect-approach",
-        "name": "Detect Creative Approach",
-        "type": "n8n-nodes-base.function",
-        "typeVersion": 1,
-        "position": [1040, 200]
-      },
-      {
-        "parameters": {
-          "functionCode": "// Split into two paths: AI vs HTML\nconst aiItems = items.filter(i => i.json.generation_method === 'ai');\nconst htmlItems = items.filter(i => i.json.generation_method !== 'ai');\n\n// Return as separate items for routing\nreturn [\n  ...aiItems.map(i => ({ json: { ...i.json, path: 'ai' } })),\n  ...htmlItems.map(i => ({ json: { ...i.json, path: 'html' } }))\n];"
-        },
-        "id": "split-paths",
-        "name": "Split AI vs HTML Paths",
-        "type": "n8n-nodes-base.function",
-        "typeVersion": 1,
-        "position": [1240, 200]
-      },
-      {
-        "parameters": {
-          "functionCode": "// AI Generator Prompt for Leonardo/DALL-E\nreturn items.map(item => ({\n  json: {\n    ...item.json,\n    ai_prompt: `${item.json.final_prompt} Style: ${item.json.theme.tagline}. No text overlay, just background art.`\n  }\n}));"
-        },
-        "id": "ai-prompt",
-        "name": "Create AI Prompt",
-        "type": "n8n-nodes-base.function",
-        "typeVersion": 1,
-        "position": [1440, 100]
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "https://api.leonardo.ai/v1/generations",
-          "authentication": "genericAuthType",
-          "genericAuthType": "httpHeaderAuth",
-          "headers": {
-            "Authorization": "Bearer YOUR_LEONARDO_KEY",
-            "Content-Type": "application/json"
-          },
-          "body": {
-            "prompt": "{{ $json.ai_prompt }}",
-            "modelId": "stable-diffusion-xl-1024-v1-0",
-            "width": "{{ $json.platform_size.w }}",
-            "height": "{{ $json.platform_size.h }}",
-            "steps": 30,
-            "negativePrompt": "text, letters, watermark"
-          },
-          "options": {}
-        },
-        "id": "leonardo-gen",
-        "name": "Generate with Leonardo",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 1,
-        "position": [1640, 100],
-        "credentials": {
-          "httpHeaderAuth": "leonardo-api"
-        }
-      },
-      {
-        "parameters": {
-          "functionCode": "// HTML Template for Medium/Low creativity\nreturn items.map(item => {\n  const { company, product, contact, address, theme, platform_size } = item.json;\n  \n  const html = `\n<!DOCTYPE html>\n<html>\n<head>\n<style>\n  body {\n    margin: 0;\n    width: ${platform_size.w}px;\n    height: ${platform_size.h}px;\n    font-family: '${theme.font}', sans-serif;\n    background: linear-gradient(135deg, ${theme.color} 0%, #ffffff 100%);\n    display: flex;\n    flex-direction: column;\n    justify-content: center;\n    align-items: center;\n    text-align: center;\n    padding: 40px;\n    box-sizing: border-box;\n  }\n  .logo { font-size: 40px; margin-bottom: 20px; }\n  .company { font-size: 56px; font-weight: bold; color: #000; }\n  .product { font-size: 40px; color: #333; margin-top: 10px; }\n  .contact { font-size: 28px; color: #555; margin-top: 10px; }\n  .tagline { font-size: 24px; color: ${theme.color}; font-style: italic; margin-top: 15px; }\n</style>\n</head>\n<body>\n  <div class=\"logo\">${theme.logo || '⭐'}</div>\n  <div class=\"company\">${company}</div>\n  <div class=\"product\">${product}</div>\n  <div class=\"contact\">${contact} | ${address}</div>\n  <div class=\"tagline\">${theme.tagline}</div>\n</body>\n</html>\n  `;\n  \n  return { json: { ...item.json, html } };\n});"
-        },
-        "id": "html-template",
-        "name": "Create HTML Template",
-        "type": "n8n-nodes-base.function",
-        "typeVersion": 1,
-        "position": [1440, 300]
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "https://chrome.browserless.io/screenshot?token=YOUR_API_KEY",
-          "authentication": "genericAuthType",
-          "genericAuthType": "httpHeaderAuth",
-          "headers": {
-            "Content-Type": "application/json"
-          },
-          "body": {
-            "html": "{{ $json.html }}",
-            "options": {
-              "fullPage": true,
-              "type": "png",
-              "viewport": {
-                "width": "{{ $json.platform_size.w }}",
-                "height": "{{ $json.platform_size.h }}"
-              }
+  "name": "AI Festival Detector & Smart Post Generator",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start",
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [240, 200]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "value": 24
             }
-          },
-          "options": {}
-        },
-        "id": "html-render",
-        "name": "Render HTML Image",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 1,
-        "position": [1640, 300],
-        "credentials": {
-          "httpHeaderAuth": "browserless-api"
+          ]
         }
       },
-      {
-        "parameters": {
-          "functionCode": "// Merge AI and HTML results\n// AI path: Get image URL from Leonardo\n// HTML path: Get binary from browserless\n\nreturn items.map(item => {\n  const isAI = item.json.path === 'ai';\n  const filename = `${item.json.company.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.png`;\n  \n  return {\n    json: {\n      ...item.json,\n      filename: filename,\n      final_image_source: isAI ? 'leonardo' : 'html',\n      binary_data: isAI ? item.json.data?.url : item.binary?.data\n    }\n  };\n});"
-        },
-        "id": "merge-results",
-        "name": "Merge Results",
-        "type": "n8n-nodes-base.function",
-        "typeVersion": 1,
-        "position": [1840, 200]
-      },
-      {
-        "parameters": {
-          "operation": "upload",
-          "parentId": "YOUR_DRIVE_FOLDER",
-          "options": {
-            "mimeType": "image/png"
-          }
-        },
-        "id": "save-drive",
-        "name": "Save to Google Drive",
-        "type": "n8n-nodes-base.googleDrive",
-        "typeVersion": 1,
-        "position": [2040, 100],
-        "credentials": {
-          "googleApi": "google-api-auth"
+      "id": "daily-trigger",
+      "name": "Daily AI Check",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [440, 200]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetName": "Queue",
+        "options": {
+          "skipHeaderRow": true,
+          "range": "A2:K"
         }
       },
-      {
-        "parameters": {
-          "operation": "update",
-          "sheetName": "Posts",
-          "options": {
-            "valueInputOption": "USER_ENTERED"
-          }
-        },
-        "id": "update-status",
-        "name": "Update Status & URLs",
-        "type": "n8n-nodes-base.googleSheets",
-        "typeVersion": 4,
-        "position": [2040, 300],
-        "credentials": {
-          "googleApi": "google-sheets-auth"
-        }
-      },
-      {
-        "parameters": {
-          "operation": "append",
-          "sheetName": "Posting Queue",
-          "options": {
-            "valueInputOption": "USER_ENTERED"
-          }
-        },
-        "id": "add-to-queue",
-        "name": "Add to Platform Queue",
-        "type": "n8n-nodes-base.googleSheets",
-        "typeVersion": 4,
-        "position": [2240, 200],
-        "credentials": {
-          "googleApi": "google-sheets-auth"
-        }
-      }
-    ],
-    "connections": {
-      "Start": {
-        "main": [[{ "node": "Hourly Check", "type": "main", "index": 0 }]]
-      },
-      "Hourly Check": {
-        "main": [[{ "node": "Read Excel/Sheets", "type": "main", "index": 0 }]]
-      },
-      "Read Excel/Sheets": {
-        "main": [[{ "node": "Filter Ready Posts", "type": "main", "index": 0 }]]
-      },
-      "Filter Ready Posts": {
-        "main": [[{ "node": "Detect Creative Approach", "type": "main", "index": 0 }]]
-      },
-      "Detect Creative Approach": {
-        "main": [[{ "node": "Split AI vs HTML Paths", "type": "main", "index": 0 }]]
-      },
-      "Split AI vs HTML Paths": {
-        "main": [
-          [{ "node": "Create AI Prompt", "type": "main", "index": 0 }],
-          [{ "node": "Create HTML Template", "type": "main", "index": 0 }]
-        ]
-      },
-      "Create AI Prompt": {
-        "main": [[{ "node": "Generate with Leonardo", "type": "main", "index": 0 }]]
-      },
-      "Create HTML Template": {
-        "main": [[{ "node": "Render HTML Image", "type": "main", "index": 0 }]]
-      },
-      "Generate with Leonardo": {
-        "main": [[{ "node": "Merge Results", "type": "main", "index": 0 }]]
-      },
-      "Render HTML Image": {
-        "main": [[{ "node": "Merge Results", "type": "main", "index": 0 }]]
-      },
-      "Merge Results": {
-        "main": [
-          [{ "node": "Save to Google Drive", "type": "main", "index": 0 }],
-          [{ "node": "Update Status & URLs", "type": "main", "index": 0 }],
-          [{ "node": "Add to Platform Queue", "type": "main", "index": 0 }]
-        ]
+      "id": "read-queue",
+      "name": "Read Queue",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [640, 200],
+      "credentials": {
+        "googleApi": "google-sheets-auth"
       }
     },
-    "active": false,
-    "settings": {
-      "executionOrder": "v1"
+    {
+      "parameters": {
+        "functionCode": "// Get current date and next 7 days\nconst today = new Date();\nconst dates = [];\n\nfor (let i = 0; i < 7; i++) {\n  const date = new Date(today);\n  date.setDate(today.getDate() + i);\n  dates.push(date.toISOString().split('T')[0]);\n}\n\n// Filter posts for next 7 days\nreturn items.filter(item => \n  item.json.schedule_date && dates.includes(item.json.schedule_date)\n);"
+      },
+      "id": "filter-upcoming",
+      "name": "Filter Upcoming 7 Days",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [840, 200]
     },
-    "versionId": "1"
-  }
+    {
+      "parameters": {
+        "functionCode": "return items.map(item => ({\n  json: {\n    ...item.json,\n    query_data: `${item.json.company}, ${item.json.product}, ${item.json.schedule_date}`\n  }\n}));"
+      },
+      "id": "prepare-ai-query",
+      "name": "Prepare AI Query",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1040, 200]
+    },
+    {
+      "parameters": {
+        "model": {
+          "name": "gpt-4",
+          "value": "gpt-4"
+        },
+        "prompt": {
+          "text": "You are an Indian social media marketing expert. Analyze the following business and date to determine:\n\n1. **Major Indian Festival/Event** for the given date (Diwali, Holi, Republic Day, Independence Day, Eid, Christmas, New Year, Raksha Bandhan, Navratri, Ganesh Chaturthi, etc.)\n2. **Post Type**: Should it be an 'offer' (discount), 'feature' (showcase product), or 'standard' (general post)?\n3. **Offer Text**: If offer type, suggest a catchy discount phrase\n4. **Features**: If feature type, list key features to highlight\n5. **Creative Level**: 'high' (AI art), 'medium' (HTML template), 'low' (simple text)\n6. **Brand Color**: Suggest appropriate color based on festival\n7. **Font**: Suggest font style\n\nBusiness Info: {{ $json.query_data }}\n\nReturn ONLY valid JSON in this exact format:\n{\n  \"festival\": \"Christmas\",\n  \"post_type\": \"offer\",\n  \"offer_text\": \"25% OFF Christmas Special!\",\n  \"features\": \"\",\n  \"creative_level\": \"high\",\n  \"brand_color\": \"#DC143C\",\n  \"font\": \"Times New Roman\"\n}\n\nIf no festival, use general marketing strategy."
+        },
+        "options": {
+          "temperature": 0.7,
+          "maxTokens": 500
+        }
+      },
+      "id": "ai-festival-detector",
+      "name": "AI Festival Detector (LLM)",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1240, 200],
+      "credentials": {
+        "openAiApi": "openai-api"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "try {\n  const aiResponse = items[0].json.choices[0].message.content;\n  // Clean up the response\n  const cleaned = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();\n  const parsed = JSON.parse(cleaned);\n  \n  // Merge with original data\n  return items.map(item => ({\n    json: {\n      ...item.json,\n      ...parsed\n    }\n  }));\n} catch (error) {\n  // Fallback if AI returns non-JSON\n  return items.map(item => ({\n    json: {\n      ...item.json,\n      festival: 'General',\n      post_type: 'standard',\n      creative_level: 'medium',\n      brand_color: '#4A90E2',\n      font: 'Arial'\n    }\n  }));\n}"
+      },
+      "id": "parse-ai-response",
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1440, 200]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetName": "Queue",
+        "options": {
+          "valueInputOption": "USER_ENTERED"
+        }
+      },
+      "id": "update-excel-ai",
+      "name": "Update Excel with AI Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1640, 200],
+      "credentials": {
+        "googleApi": "google-sheets-auth"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Now generate images based on AI decisions\nreturn items.map(item => {\n  const creative = item.json.creative_level || 'medium';\n  \n  // Build prompt for image generation\n  let imagePrompt = '';\n  if (creative === 'high') {\n    imagePrompt = `Festive ${item.json.festival} art for ${item.json.company}, vibrant colors, professional, elegant, no text, no letters, 1024x1024, high quality, trending on artstation`;\n  } else {\n    imagePrompt = `Clean background for ${item.json.company}, brand colors ${item.json.brand_color}, professional, minimal, no text`;\n  }\n  \n  // Build HTML template\n  const html = `\n<!DOCTYPE html>\n<html>\n<head>\n<style>\n  body {\n    margin: 0;\n    width: 1080px;\n    height: 1080px;\n    font-family: '${item.json.font}', sans-serif;\n    background: ${creative === 'high' ? `url('AI_IMAGE_URL') center/cover` : `linear-gradient(135deg, ${item.json.brand_color} 0%, #ffffff 100%)`};\n    display: flex;\n    flex-direction: column;\n    justify-content: center;\n    align-items: center;\n    text-align: center;\n    padding: 40px;\n    box-sizing: border-box;\n  }\n  .festival-badge { font-size: 48px; margin-bottom: 20px; }\n  .company { font-size: 72px; font-weight: bold; color: #000; text-shadow: 2px 2px 4px rgba(255,255,255,0.8); }\n  .offer { font-size: 56px; color: ${item.json.brand_color}; font-weight: bold; margin: 10px 0; }\n  .features { font-size: 40px; color: #333; margin: 10px 0; }\n  .contact { font-size: 32px; color: #555; font-style: italic; }\n  .discount { background: #000; color: #fff; padding: 15px 30px; border-radius: 30px; font-size: 36px; margin-top: 20px; }\n</style>\n</head>\n<body>\n  <div class=\"festival-badge\">${item.json.festival === 'General' ? '✨' : (item.json.festival === 'Diwali' ? '🪔' : item.json.festival === 'Christmas' ? '🎄' : item.json.festival === 'Holi' ? '🎨' : '🎉')}</div>\n  <div class=\"company\">${item.json.company}</div>\n  ${item.json.post_type === 'offer' ? `<div class=\"offer\">${item.json.offer_text}</div>` : ''}\n  ${item.json.post_type === 'feature' ? `<div class=\"features\">${item.json.features}</div>` : ''}\n  <div class=\"contact\">${item.json.contact} | ${item.json.address}</div>\n  ${item.json.post_type === 'offer' ? `<div class=\"discount\">${item.json.offer_text}</div>` : ''}\n</body>\n</html>\n  `;\n  \n  return {\n    json: {\n      ...item.json,\n      ai_image_prompt: imagePrompt,\n      html_template: html,\n      filename: `${item.json.company.replace(/[^a-zA-Z0-9]/g, '_')}_${item.json.festival}_${Date.now()}.png`\n    }\n  };\n});"
+      },
+      "id": "build-templates",
+      "name": "Build AI & HTML Templates",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1840, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.leonardo.ai/v1/generations",
+        "authentication": "genericAuthType",
+        "genericAuthType": "httpHeaderAuth",
+        "headers": {
+          "Authorization": "Bearer YOUR_LEONARDO_KEY",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "prompt": "{{ $json.ai_image_prompt }}",
+          "modelId": "stable-diffusion-xl-1024-v1-0",
+          "width": 1024,
+          "height": 1024,
+          "steps": 30,
+          "negativePrompt": "text, letters, watermark, signature, typography"
+        },
+        "options": {}
+      },
+      "id": "generate-ai-bg",
+      "name": "Generate AI Background",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [2040, 100],
+      "credentials": {
+        "httpHeaderAuth": "leonardo-api"
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Get AI image URL and update HTML\nconst aiUrl = items[0].json.data?.url || items[0].json.data?.[0]?.url;\n\nreturn items.map(item => ({\n  json: {\n    ...item.json,\n    html_with_ai: item.json.html_template.replace('AI_IMAGE_URL', aiUrl)\n  }\n}));"
+      },
+      "id": "inject-ai-url",
+      "name": "Inject AI Image URL",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2240, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://chrome.browserless.io/screenshot?token=YOUR_API_KEY",
+        "authentication": "genericAuthType",
+        "genericAuthType": "httpHeaderAuth",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "html": "{{ $json.html_with_ai }}",
+          "options": {
+            "fullPage": true,
+            "type": "png",
+            "waitFor": 2000
+          }
+        }
+      },
+      "id": "final-render",
+      "name": "Render Final Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [2440, 100],
+      "credentials": {
+        "httpHeaderAuth": "browserless-api"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "parentId": "YOUR_DRIVE_FOLDER",
+        "options": {
+          "mimeType": "image/png"
+        }
+      },
+      "id": "save-image",
+      "name": "Save to Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 1,
+      "position": [2640, 100],
+      "credentials": {
+        "googleApi": "google-api-auth"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "sheetName": "Queue",
+        "options": {
+          "valueInputOption": "USER_ENTERED"
+        }
+      },
+      "id": "update-final",
+      "name": "Update Final Status",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [2640, 300],
+      "credentials": {
+        "googleApi": "google-sheets-auth"
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [[{ "node": "Daily AI Check", "type": "main", "index": 0 }]]
+    },
+    "Daily AI Check": {
+      "main": [[{ "node": "Read Queue", "type": "main", "index": 0 }]]
+    },
+    "Read Queue": {
+      "main": [[{ "node": "Filter Upcoming 7 Days", "type": "main", "index": 0 }]]
+    },
+    "Filter Upcoming 7 Days": {
+      "main": [[{ "node": "Prepare AI Query", "type": "main", "index": 0 }]]
+    },
+    "Prepare AI Query": {
+      "main": [[{ "node": "AI Festival Detector (LLM)", "type": "main", "index": 0 }]]
+    },
+    "AI Festival Detector (LLM)": {
+      "main": [[{ "node": "Parse AI Response", "type": "main", "index": 0 }]]
+    },
+    "Parse AI Response": {
+      "main": [[{ "node": "Update Excel with AI Data", "type": "main", "index": 0 }]]
+    },
+    "Update Excel with AI Data": {
+      "main": [[{ "node": "Build AI & HTML Templates", "type": "main", "index": 0 }]]
+    },
+    "Build AI & HTML Templates": {
+      "main": [
+        [{ "node": "Generate AI Background", "type": "main", "index": 0 }],
+        [{ "node": "Inject AI Image URL", "type": "main", "index": 0 }]
+      ]
+    },
+    "Generate AI Background": {
+      "main": [[{ "node": "Inject AI Image URL", "type": "main", "index": 0 }]]
+    },
+    "Inject AI Image URL": {
+      "main": [[{ "node": "Render Final Image", "type": "main", "index": 0 }]]
+    },
+    "Render Final Image": {
+      "main": [
+        [{ "node": "Save to Drive", "type": "main", "index": 0 }],
+        [{ "node": "Update Final Status", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1"
+}
