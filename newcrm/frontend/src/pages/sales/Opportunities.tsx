@@ -6,16 +6,19 @@ import DataTable from '../components/common/DataTable';
 import Modal from '../components/common/Modal';
 import Input from '../components/common/Input';
 import Select from '../components/common/Select';
-import { Plus, Search, Filter, Download, Upload } from 'lucide-react';
+import KanbanBoard from '../components/common/KanbanBoard';
+import { Plus, Search, Filter, Download, Upload, List, Columns } from 'lucide-react';
 
 const Opportunities: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
-  
+  const [viewMode, setViewMode] = useState<'table' | 'kanban'>('kanban'); // Default to kanban view
+  const [selectedStage, setSelectedStage] = useState<string | null>(null);
+
   const { data: opportunities, isLoading, error, refetch } = useGetOpportunitiesQuery();
   const [createOpportunity, { isLoading: isCreating }] = useCreateOpportunityMutation();
-  
+
   const [newOpportunity, setNewOpportunity] = useState({
     name: '',
     description: '',
@@ -59,14 +62,24 @@ const Opportunities: React.FC = () => {
     setSortConfig({ key, direction });
   };
 
-  const columns = [
-    { key: 'name', title: 'Opportunity', sortable: true },
-    { key: 'accountId', title: 'Account', sortable: true },
-    { key: 'contactId', title: 'Contact', sortable: true },
-    { key: 'stage', title: 'Stage', sortable: true },
-    { key: 'probability', title: 'Probability', sortable: true },
-    { key: 'amount', title: 'Amount', sortable: true },
-    { key: 'closeDate', title: 'Close Date', sortable: true },
+  const handleMoveOpportunity = (itemId: string, fromColumn: string, toColumn: string) => {
+    console.log(`Moving opportunity ${itemId} from ${fromColumn} to ${toColumn}`);
+    // In a real app, this would update the opportunity's stage
+  };
+
+  const handleAddToColumn = (columnId: string) => {
+    setNewOpportunity({...newOpportunity, stage: columnId});
+    setShowCreateModal(true);
+  };
+
+  // Define pipeline stages
+  const pipelineStages = [
+    { id: 'prospecting', name: 'Prospecting' },
+    { id: 'qualification', name: 'Qualification' },
+    { id: 'proposal', name: 'Proposal' },
+    { id: 'negotiation', name: 'Negotiation' },
+    { id: 'closed-won', name: 'Closed Won' },
+    { id: 'closed-lost', name: 'Closed Lost' },
   ];
 
   // Mock data since we don't have real data yet
@@ -76,25 +89,57 @@ const Opportunities: React.FC = () => {
       name: 'Acme Manufacturing Contract',
       accountId: 'Account 1',
       contactId: 'Contact 1',
-      stage: 'Proposal',
+      stage: 'proposal',
       probability: 25,
       amount: 500000,
       currency: 'USD',
       closeDate: '2023-12-31',
-      type: 'New Business'
+      type: 'New Business',
+      owner: 'John Smith'
     },
     {
       id: '2',
       name: 'XYZ Services Deal',
       accountId: 'Account 2',
       contactId: 'Contact 2',
-      stage: 'Negotiation',
+      stage: 'negotiation',
       probability: 75,
       amount: 250000,
       currency: 'USD',
       closeDate: '2023-11-15',
-      type: 'New Business'
+      type: 'New Business',
+      owner: 'Jane Doe'
+    },
+    {
+      id: '3',
+      name: 'ABC Tech Project',
+      accountId: 'Account 3',
+      contactId: 'Contact 3',
+      stage: 'qualification',
+      probability: 40,
+      amount: 150000,
+      currency: 'USD',
+      closeDate: '2023-10-30',
+      type: 'New Business',
+      owner: 'Mike Johnson'
     }
+  ];
+
+  // Group opportunities by stage for Kanban view
+  const kanbanColumns = pipelineStages.map(stage => ({
+    id: stage.id,
+    title: stage.name,
+    items: mockOpportunities.filter(opp => opp.stage === stage.id)
+  }));
+
+  const columns = [
+    { key: 'name', title: 'Opportunity', sortable: true },
+    { key: 'accountId', title: 'Account', sortable: true },
+    { key: 'contactId', title: 'Contact', sortable: true },
+    { key: 'stage', title: 'Stage', sortable: true },
+    { key: 'probability', title: 'Probability', sortable: true },
+    { key: 'amount', title: 'Amount', sortable: true },
+    { key: 'closeDate', title: 'Close Date', sortable: true },
   ];
 
   if (isLoading) {
@@ -141,9 +186,35 @@ const Opportunities: React.FC = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+
+            <Select
+              label="Stage"
+              value={selectedStage || ''}
+              onChange={(value) => setSelectedStage(value || null)}
+              options={[
+                { value: '', label: 'All Stages' },
+                ...pipelineStages.map(stage => ({ value: stage.id, label: stage.name }))
+              ]}
+            />
           </div>
-          
+
           <div className="flex flex-wrap gap-2">
+            <Button
+              variant={viewMode === 'table' ? 'primary' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode('table')}
+            >
+              <List className="h-4 w-4 mr-1" />
+              List
+            </Button>
+            <Button
+              variant={viewMode === 'kanban' ? 'primary' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode('kanban')}
+            >
+              <Columns className="h-4 w-4 mr-1" />
+              Board
+            </Button>
             <Button variant="outline" size="sm">
               <Filter className="h-4 w-4 mr-1" />
               Filter
@@ -164,17 +235,27 @@ const Opportunities: React.FC = () => {
         </div>
       </Card>
 
-      {/* Opportunities Table */}
-      <Card>
-        <DataTable
-          columns={columns}
-          data={opportunities || mockOpportunities}
-          loading={isLoading}
-          onSort={handleSort}
-          currentSort={sortConfig}
-          onRowClick={(opportunity) => console.log('Opportunity clicked:', opportunity)}
-        />
-      </Card>
+      {/* Opportunities View */}
+      {viewMode === 'table' ? (
+        <Card>
+          <DataTable
+            columns={columns}
+            data={opportunities || mockOpportunities}
+            loading={isLoading}
+            onSort={handleSort}
+            currentSort={sortConfig}
+            onRowClick={(opportunity) => console.log('Opportunity clicked:', opportunity)}
+          />
+        </Card>
+      ) : (
+        <Card className="overflow-x-auto">
+          <KanbanBoard
+            columns={kanbanColumns}
+            onMoveItem={handleMoveOpportunity}
+            onAddItem={handleAddToColumn}
+          />
+        </Card>
+      )}
 
       {/* Create Opportunity Modal */}
       <Modal
@@ -189,13 +270,13 @@ const Opportunities: React.FC = () => {
             onChange={(e) => setNewOpportunity({...newOpportunity, name: e.target.value})}
             required
           />
-          
+
           <Input
             label="Description"
             value={newOpportunity.description}
             onChange={(e) => setNewOpportunity({...newOpportunity, description: e.target.value})}
           />
-          
+
           <div className="grid grid-cols-1 gap-y-4 gap-x-4 sm:grid-cols-2">
             <Input
               label="Account ID"
@@ -208,20 +289,16 @@ const Opportunities: React.FC = () => {
               onChange={(e) => setNewOpportunity({...newOpportunity, contactId: e.target.value})}
             />
           </div>
-          
+
           <div className="grid grid-cols-1 gap-y-4 gap-x-4 sm:grid-cols-2">
             <Select
               label="Stage"
               value={newOpportunity.stage}
               onChange={(value) => setNewOpportunity({...newOpportunity, stage: value})}
-              options={[
-                { value: 'prospecting', label: 'Prospecting' },
-                { value: 'qualification', label: 'Qualification' },
-                { value: 'proposal', label: 'Proposal' },
-                { value: 'negotiation', label: 'Negotiation' },
-                { value: 'closed-won', label: 'Closed Won' },
-                { value: 'closed-lost', label: 'Closed Lost' },
-              ]}
+              options={pipelineStages.map(stage => ({
+                value: stage.id,
+                label: stage.name
+              }))}
             />
             <Select
               label="Type"
@@ -233,7 +310,7 @@ const Opportunities: React.FC = () => {
               ]}
             />
           </div>
-          
+
           <div className="grid grid-cols-1 gap-y-4 gap-x-4 sm:grid-cols-2">
             <Input
               label="Probability (%)"
@@ -248,7 +325,7 @@ const Opportunities: React.FC = () => {
               onChange={(e) => setNewOpportunity({...newOpportunity, amount: parseFloat(e.target.value) || 0})}
             />
           </div>
-          
+
           <div className="grid grid-cols-1 gap-y-4 gap-x-4 sm:grid-cols-2">
             <Select
               label="Currency"
@@ -269,13 +346,13 @@ const Opportunities: React.FC = () => {
             />
           </div>
         </div>
-        
+
         <div className="mt-6 flex justify-end space-x-3">
           <Button variant="outline" onClick={() => setShowCreateModal(false)}>
             Cancel
           </Button>
-          <Button 
-            onClick={handleCreateOpportunity} 
+          <Button
+            onClick={handleCreateOpportunity}
             loading={isCreating}
             disabled={isCreating}
           >

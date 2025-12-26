@@ -1,6 +1,7 @@
 import React from 'react';
 import Header from './Header';
 import Sidebar from './Sidebar';
+import QuickActionButton from '../common/QuickActionButton';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -19,6 +20,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
             </div>
           </div>
         </main>
+        <QuickActionButton position="bottom-right" />
       </div>
     </div>
   );

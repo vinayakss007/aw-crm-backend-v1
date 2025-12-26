@@ -9,12 +9,17 @@ import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import Dashboard from './pages/dashboard/Dashboard';
 import Leads from './pages/sales/Leads';
+import LeadDetail from './pages/sales/LeadDetail';
 import Opportunities from './pages/sales/Opportunities';
 import Contacts from './pages/sales/Contacts';
 import Accounts from './pages/sales/Accounts';
 import Activities from './pages/sales/Activities';
 import Settings from './pages/settings/Settings';
 import AdminUsers from './pages/admin/Users';
+import AdminUserManagement from './pages/admin/UserManagement';
+import AdminSystemSettings from './pages/admin/SystemSettings';
+import AdminDashboard from './pages/admin/Dashboard';
+import CustomerPortal from './pages/customer/Portal';
 import './styles/index.css';
 
 function App() {
@@ -35,7 +40,7 @@ function App() {
                   <Register />
                 </AuthLayout>
               } />
-              
+
               {/* Protected Routes */}
               <Route path="/" element={
                 <DashboardLayout>
@@ -50,6 +55,11 @@ function App() {
               <Route path="/leads" element={
                 <DashboardLayout>
                   <Leads />
+                </DashboardLayout>
+              } />
+              <Route path="/leads/:id" element={
+                <DashboardLayout>
+                  <LeadDetail />
                 </DashboardLayout>
               } />
               <Route path="/opportunities" element={
@@ -77,9 +87,38 @@ function App() {
                   <Settings />
                 </DashboardLayout>
               } />
+
+              {/* Admin Routes */}
+              <Route path="/admin" element={
+                <DashboardLayout>
+                  <AdminDashboard />
+                </DashboardLayout>
+              } />
               <Route path="/admin/users" element={
                 <DashboardLayout>
                   <AdminUsers />
+                </DashboardLayout>
+              } />
+              <Route path="/admin/user-management" element={
+                <DashboardLayout>
+                  <AdminUserManagement />
+                </DashboardLayout>
+              } />
+              <Route path="/admin/system-settings" element={
+                <DashboardLayout>
+                  <AdminSystemSettings />
+                </DashboardLayout>
+              } />
+
+              {/* Customer Portal Routes */}
+              <Route path="/customer" element={
+                <DashboardLayout>
+                  <CustomerPortal />
+                </DashboardLayout>
+              } />
+              <Route path="/customer/portal" element={
+                <DashboardLayout>
+                  <CustomerPortal />
                 </DashboardLayout>
               } />
             </Routes>
