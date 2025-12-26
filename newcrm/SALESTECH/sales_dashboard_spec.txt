@@ -1,0 +1,79 @@
+SALES DASHBOARD DATA & FEATURE SPECIFICATION
+
+FILE NAME sales_dashboard_spec.txt
+
+PURPOSE This document defines: - What data comes IN - What features are
+shown - What data goes OUT - How raw sales data turns into business
+decisions
+
+  ------------------------------
+  1. DATA IN (SOURCE OF TRUTH)
+  ------------------------------
+
+USERS (Sales Team) - user_id - name - role (rep / manager / admin) -
+team_id - region - joining_date - status
+
+LEADS - lead_id - created_at - source - industry - company_size -
+owner_user_id - status
+
+OPPORTUNITIES (Deals) - deal_id - lead_id - owner_user_id - stage -
+deal_value - probability - expected_close_date - actual_close_date -
+created_at - updated_at - loss_reason - product - region
+
+ACTIVITIES - activity_id - deal_id - user_id - activity_type -
+activity_date - duration_minutes - outcome
+
+TARGETS - target_id - user_id / team_id - time_period - target_value
+
+  -------------------------
+  2. DATA TRANSFORMATIONS
+  -------------------------
+
+Closed Revenue Sum of deal_value where stage = closed_won
+
+Pipeline Value Sum of deal_value where deal not closed
+
+Weighted Pipeline deal_value × probability
+
+Win Rate closed_won / (closed_won + closed_lost)
+
+Sales Velocity Average days from deal creation to close
+
+  -------------------
+  3. FEATURES SHOWN
+  -------------------
+
+EXECUTIVE VIEW - Total revenue (MTD/QTD/YTD) - Revenue vs target -
+Forecast confidence - Pipeline coverage - High-risk deals
+
+MANAGER VIEW - Funnel conversion - Rep leaderboard - Deal slippage -
+Activity vs revenue
+
+SALES REP VIEW - My open deals - Next actions - Deal risk alerts -
+Activity score
+
+  --------------------------------
+  4. DATA OUT (DASHBOARD OUTPUT)
+  --------------------------------
+
+KPI Metrics - Revenue - Target - Growth rate - Win rate
+
+Charts - Funnel chart - Revenue trend - Pipeline by stage - Rep
+performance table
+
+Alerts - Stuck deals - High-risk deals - Target gap warnings
+
+  ------------
+  5. FILTERS
+  ------------
+
+-   Date range
+-   Sales rep
+-   Team
+-   Region
+-   Product
+-   Deal size
+
+------------------------------------------------------------------------
+
+END OF FILE

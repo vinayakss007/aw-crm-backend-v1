@@ -3,7 +3,10 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
-import config from './config/config';
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
 
 // Import routes
 import userRoutes from './routes/userRoutes';
@@ -27,66 +30,26 @@ import authMiddleware from './middleware/authMiddleware';
 // Initialize Express app
 const app: Application = express();
 
-// Security middleware with production configurations
-app.use(helmet(config.security.helmet));
-
-// CORS with environment-specific origins
-app.use(cors({
-  origin: config.cors.origin,
-  credentials: config.cors.credentials
-}));
-
+// Security middleware
+app.use(helmet());
+app.use(cors());
 app.use(compression());
 
-// Rate limiting with environment-specific configurations
+// Rate limiting
 const limiter = rateLimit({
-  windowMs: config.rateLimit.windowMs,
-  max: config.rateLimit.max,
-  message: config.rateLimit.message,
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.'
 });
 app.use(limiter);
 
-// Body parsing middleware with security limits
-app.use(express.json({
-  limit: '10mb',
-  verify: (req, res, buf, encoding) => {
-    // Optional: Add additional security checks here
-    if (buf.length > 10 * 1024 * 1024) { // 10MB
-      // This callback is synchronous and throws an error to stop parsing
-      throw new Error('Request body too large');
-    }
-  }
-}));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Add security headers
-app.use((req, res, next) => {
-  // Prevent XSS attacks
-  res.setHeader('X-XSS-Protection', '1; mode=block');
-
-  // Prevent clickjacking
-  res.setHeader('X-Frame-Options', 'DENY');
-
-  // Prevent MIME type sniffing
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-
-  // HSTS
-  if (config.node_env === 'production') {
-    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
-  }
-
-  next();
-});
+// Body parsing middleware
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
 
 // API routes
 app.get('/', (req: Request, res: Response) => {
-  res.json({
-    message: 'Welcome to ABETWORKS CRM API',
-    version: '1.0.0',
-    environment: config.node_env
-  });
+  res.json({ message: 'Welcome to ABETWORKS CRM API' });
 });
 
 // API versioning - all routes are under v1
@@ -122,40 +85,19 @@ app.use(notFound);
 app.use(errorHandler);
 
 // Get port from environment and store in Express
-const port = config.port;
+const port = process.env.PORT || 5000;
 
 // Server initialization
 const server = app.listen(port, () => {
-  console.log(`ABETWORKS CRM server running on port ${port} in ${config.node_env} mode`);
+  console.log(`ABETWORKS CRM server running on port ${port}`);
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully...');
-  server.close(() => {
-    console.log('Process terminated.');
-    process.exit(0);
-  });
-});
-
 process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully...');
+  console.log('\nShutting down gracefully...');
   server.close(() => {
     console.log('Process terminated.');
-    process.exit(0);
   });
-});
-
-// Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
-  process.exit(1);
-});
-
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  process.exit(1);
 });
 
 export default app;
